@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Informes de Notas</title>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;margin:0;background:#f5f6f8;color:#222}.wrap{max-width:1100px;margin:auto;padding:28px}.card{background:#fff;border:1px solid #ddd;border-radius:12px;padding:20px;margin-bottom:18px;box-shadow:0 1px 4px #0001}label{display:block;font-weight:700;margin-top:12px}input,select{width:100%;box-sizing:border-box;padding:10px;border:1px solid #bbb;border-radius:8px;margin-top:4px}button{border:0;border-radius:8px;padding:10px 14px;background:#174ea6;color:#fff;cursor:pointer;font-weight:700}button.secondary{background:#555}button.danger{background:#8a1f11}button:disabled{opacity:.55;cursor:not-allowed}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.students{width:100%;border-collapse:collapse}.students th,.students td{border:1px solid #ddd;padding:8px;text-align:left}.students th{background:#eef2ff}.actions{display:flex;gap:8px;flex-wrap:wrap}.muted{color:#666;font-size:14px}.error{color:#b00020;font-weight:700}@media(max-width:700px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Generador de informes de notas</h1>
+  <div class="card">
+    <h2>1. Datos del informe</h2>
+    <div class="grid">
+      <div><label>Curso</label><input id="curso" placeholder="Ej: 3° Medio TP Programación"></div>
+      <div><label>Periodo</label><input id="periodo" value="Primer Semestre"></div>
+      <div><label>Año escolar</label><input id="anio" value="2026"></div>
+      <div><label>Profesor(a) jefe</label><input id="profesorJefe" placeholder="Nombre profesor jefe"></div>
+      <div><label>Director(a)</label><input id="director" value="Arturo Alvear Avendaño"></div>
+      <div><label>Formato masivo</label><select id="format"><option value="docx">Word (.docx)</option><option value="pdf">PDF</option></select></div>
+    </div>
+    <p class="muted">Logos: deje los archivos en <b>assets/logo-bicentenario.png</b> y <b>assets/logo-liceo.png</b>. También puede ajustar esas rutas en el backend.</p>
+  </div>
+  <div class="card">
+    <h2>2. Cargar planilla Excel</h2>
+    <input type="file" id="excel" accept=".xlsx,.xls" />
+    <br><br><div class="actions">
+      <button id="uploadBtn">Leer planilla</button>
+      <button id="clearBtn" class="danger" type="button">Nueva carga / limpiar</button>
+    </div>
+    <p id="status"></p>
+  </div>
+  <div class="card" id="results" style="display:none">
+    <h2>3. Estudiantes encontrados</h2>
+    <p id="summary"></p>
+    <div class="actions">
+      <button onclick="toggleAll(true)">Marcar todos</button>
+      <button class="secondary" onclick="toggleAll(false)">Desmarcar todos</button>
+      <button onclick="downloadAll()">Descargar seleccionados en ZIP</button>
+    </div>
+    <br>
+    <table class="students">
+      <thead><tr><th></th><th>Nombre</th><th>RUT</th><th>Promedio semestral</th><th>Acciones</th></tr></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+</div>
+<script>
+let sessionId = null;
+let students = [];
+function clearApp(){
+  sessionId = null;
+  students = [];
+  excel.value = '';
+  curso.value = '';
+  periodo.value = 'Primer Semestre';
+  anio.value = '2026';
+  profesorJefe.value = '';
+  director.value = 'Arturo Alvear Avendaño';
+  format.value = 'docx';
+  status.textContent = 'Formulario limpio. Puede cargar una nueva planilla.';
+  status.className = '';
+  summary.textContent = '';
+  tbody.innerHTML = '';
+  results.style.display = 'none';
+}
+
+function meta(){return {curso:curso.value,periodo:periodo.value,anio:anio.value,profesorJefe:profesorJefe.value,director:director.value};}
+async function upload(){
+  status.textContent='Leyendo planilla...'; status.className='';
+  const f=excel.files[0]; if(!f){status.textContent='Seleccione un archivo Excel.';status.className='error';return;}
+  const fd=new FormData(); fd.append('excel',f); fd.append('meta',JSON.stringify(meta()));
+  const r=await fetch('/api/upload',{method:'POST',body:fd}); const data=await r.json();
+  if(!r.ok){status.textContent=data.error||'Error al cargar.';status.className='error';return;}
+  sessionId=data.sessionId; students=data.students; status.textContent='Planilla leída correctamente.';
+  results.style.display='block'; summary.textContent=`${students.length} estudiantes | ${data.subjects.length} asignaturas/módulos.`;
+  tbody.innerHTML=students.map((s,i)=>`<tr><td><input type="checkbox" class="sel" value="${i}" checked></td><td>${s.nombre}</td><td>${s.rut}</td><td>${s.promedioSemestral||''}</td><td><button onclick="downloadOne(${i},'docx')">Word</button> <button onclick="downloadOne(${i},'pdf')">PDF</button></td></tr>`).join('');
+}
+function toggleAll(v){document.querySelectorAll('.sel').forEach(c=>c.checked=v)}
+async function downloadOne(i,fmt){
+  const r=await fetch(`/api/report/${sessionId}/${i}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({format:fmt})});
+  if(!r.ok){alert((await r.json()).error);return;} saveBlob(await r.blob(), r.headers.get('content-disposition'));
+}
+async function downloadAll(){
+  const selected=[...document.querySelectorAll('.sel:checked')].map(c=>Number(c.value));
+  const r=await fetch(`/api/report-all/${sessionId}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({selected,format:format.value})});
+  if(!r.ok){alert((await r.json()).error);return;} saveBlob(await r.blob(), r.headers.get('content-disposition'));
+}
+function saveBlob(blob, cd){
+  let filename='informes.zip'; const m=/filename="?([^";]+)"?/i.exec(cd||''); if(m) filename=m[1];
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=filename; a.click(); URL.revokeObjectURL(a.href);
+}
+uploadBtn.addEventListener('click',upload);
+clearBtn.addEventListener('click',clearApp);
+</script>
+</body>
+</html>

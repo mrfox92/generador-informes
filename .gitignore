@@ -1,0 +1,42 @@
+# Dependencias
+node_modules/
+
+# Archivos generados
+reports/
+uploads/
+
+# Variables de entorno
+.env
+.env.local
+
+# Logs
+*.log
+npm-debug.log*
+
+# VS Code
+.vscode/settings.json
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Mac
+.DS_Store
+
+# Archivos temporales
+tmp/
+temp/
+
+# Cobertura de pruebas
+coverage/
+
+# Build
+dist/
+build/
+
+# Archivos ZIP generados
+*.zip
+
+# PDF y Word generados
+*.pdf
+*.docx
